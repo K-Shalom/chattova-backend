@@ -26,4 +26,10 @@ async function getOne(req, res) {
   res.status(200).json({ success: true, data: conversation });
 }
 
-module.exports = { createDirect, createGroup, listMine, getOne };
+async function markRead(req, res) {
+  const { messageId } = req.body;
+  const result = await conversationsService.markConversationRead(req.user.id, req.params.id, messageId);
+  res.status(200).json({ success: true, data: result });
+}
+
+module.exports = { createDirect, createGroup, listMine, getOne, markRead };
