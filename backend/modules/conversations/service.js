@@ -2,6 +2,7 @@
 
 const AppError = require('../../common/errors/AppError');
 const usersRepository = require('../users/repository');
+const blocksRepository = require('../blocks/repository');
 const { toConversationSummary, toConversationDetail } = require('./dto');
 const conversationsRepository = require('./repository');
 
@@ -13,6 +14,11 @@ async function createOrGetDirectConversation(currentUserId, otherUserId) {
   const otherUser = await usersRepository.findById(otherUserId);
   if (!otherUser) {
     throw new AppError('The user you are trying to message does not exist.', 404, 'USER_NOT_FOUND');
+  }
+
+  const blocked = await blocksRepository.isBlockedEitherWay(currentUserId, otherUserId);
+  if (blocked) {
+    throw new AppError('You cannot message this user.', 403, 'USER_BLOCKED');
   }
 
   const existing = await conversationsRepository.findDirectConversationBetween(currentUserId, otherUserId);
@@ -81,9 +87,39 @@ async function getConversationDetail(currentUserId, conversationId) {
   return toConversationDetail(conversation, participants);
 }
 
+async function markConversationRead(currentUserId, conversationId, messageId) {
+  const isMember = await conversationsRepository.isParticipant(conversationId, currentUserId);
+  if (!isMember) {
+    throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
+  }
+
+  const messagesRepository = require('../messages/repository');
+  const message = await messagesRepository.findById(messageId);
+  if (!message || message.conversation_id !== conversationId) {
+    throw new AppError('Message not found in this conversation.', 404, 'MESSAGE_NOT_FOUND');
+  }
+
+  await conversationsRepository.updateLastRead(conversationId, currentUserId, messageId);
+  await messagesRepository.markMessageRead(messageId, currentUserId);
+
+  // Let other participants know this user has caught up to this message —
+  // clients use this to show "seen" ticks.
+  try {
+    const { getIO } = require('../../sockets/registry');
+    getIO().to(`conversation:${conversationId}`).emit('conversation:read', {
+      conversationId, userId: currentUserId, messageId,
+    });
+  } catch (err) {
+    console.error('Socket broadcast failed:', err.message);
+  }
+
+  return { conversationId, lastReadMessageId: messageId };
+}
+
 module.exports = {
   createOrGetDirectConversation,
   createGroupConversation,
   listMyConversations,
   getConversationDetail,
+  markConversationRead,
 };
