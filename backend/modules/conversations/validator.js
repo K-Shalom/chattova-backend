@@ -23,4 +23,9 @@ const conversationIdParamRule = [
   param('id').isUUID().withMessage('Invalid conversation id.'),
 ];
 
-module.exports = { createDirectRules, createGroupRules, conversationIdParamRule };
+const markReadRules = [
+  param('id').isUUID().withMessage('Invalid conversation id.'),
+  body('messageId').isUUID().withMessage('messageId is required and must be valid.'),
+];
+
+module.exports = { createDirectRules, createGroupRules, conversationIdParamRule, markReadRules };
