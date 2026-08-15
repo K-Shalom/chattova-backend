@@ -91,6 +91,15 @@ async function findConversationsForUser(userId) {
   return result.rows;
 }
 
+async function updateLastRead(conversationId, userId, messageId) {
+  await pool.query(
+    `UPDATE conversation_participants
+     SET last_read_message_id = $1
+     WHERE conversation_id = $2 AND user_id = $3`,
+    [messageId, conversationId, userId]
+  );
+}
+
 module.exports = {
   createConversation,
   addParticipant,
@@ -99,4 +108,5 @@ module.exports = {
   findParticipants,
   isParticipant,
   findConversationsForUser,
+  updateLastRead,
 };
