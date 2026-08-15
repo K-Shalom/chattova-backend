@@ -28,9 +28,6 @@ async function findByIdWithSender(id) {
   return result.rows[0] || null;
 }
 
-// Cursor-based pagination: fetches messages older than `before` (a timestamp),
-// newest first, limited to `limit`. This is more reliable than page numbers
-// once new messages keep arriving while someone is scrolling up.
 async function findByConversation(conversationId, { limit, before }) {
   const params = [conversationId];
   let whereClause = 'WHERE m.conversation_id = $1 AND m.deleted_at IS NULL';
@@ -54,4 +51,86 @@ async function findByConversation(conversationId, { limit, before }) {
   return result.rows;
 }
 
-module.exports = { createMessage, findById, findByIdWithSender, findByConversation };
+// --- Editing ---
+
+async function updateContent(id, newContent) {
+  await pool.query(
+    `UPDATE messages SET content = $1, edited = TRUE WHERE id = $2`,
+    [newContent, id]
+  );
+  return findByIdWithSender(id);
+}
+
+async function saveEditHistory(messageId, oldContent, editedBy) {
+  await pool.query(
+    `INSERT INTO message_history (message_id, old_content, edited_by) VALUES ($1, $2, $3)`,
+    [messageId, oldContent, editedBy]
+  );
+}
+
+// --- Deleting (soft delete, keeps the row for audit/history) ---
+
+async function softDelete(id, deletedBy) {
+  await pool.query(
+    `UPDATE messages SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $1 WHERE id = $2`,
+    [deletedBy, id]
+  );
+}
+
+// --- Reactions ---
+
+async function addReaction(messageId, userId, emoji) {
+  await pool.query(
+    `INSERT INTO message_reactions (message_id, user_id, emoji)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
+    [messageId, userId, emoji]
+  );
+  return getReactionsSummary(messageId);
+}
+
+async function removeReaction(messageId, userId, emoji) {
+  await pool.query(
+    `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+    [messageId, userId, emoji]
+  );
+  return getReactionsSummary(messageId);
+}
+
+async function getReactionsSummary(messageId) {
+  const result = await pool.query(
+    `SELECT emoji, COUNT(*)::int AS count, ARRAY_AGG(user_id) AS user_ids
+     FROM message_reactions
+     WHERE message_id = $1
+     GROUP BY emoji
+     ORDER BY emoji`,
+    [messageId]
+  );
+  return result.rows;
+}
+
+// --- Read receipts ---
+
+async function markMessageRead(messageId, userId) {
+  await pool.query(
+    `INSERT INTO message_statuses (message_id, user_id, read_at)
+     VALUES ($1, $2, CURRENT_TIMESTAMP)
+     ON CONFLICT (message_id, user_id)
+     DO UPDATE SET read_at = COALESCE(message_statuses.read_at, CURRENT_TIMESTAMP)`,
+    [messageId, userId]
+  );
+}
+
+module.exports = {
+  createMessage,
+  findById,
+  findByIdWithSender,
+  findByConversation,
+  updateContent,
+  saveEditHistory,
+  softDelete,
+  addReaction,
+  removeReaction,
+  getReactionsSummary,
+  markMessageRead,
+};
