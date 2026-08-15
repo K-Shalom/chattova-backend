@@ -5,7 +5,7 @@
 
 const express = require('express');
 const conversationsController = require('./controller');
-const { createDirectRules, createGroupRules, conversationIdParamRule } = require('./validator');
+const { createDirectRules, createGroupRules, conversationIdParamRule, markReadRules } = require('./validator');
 const validate = require('../../common/middleware/validate');
 const authenticate = require('../../common/middleware/authenticate');
 const asyncHandler = require('../../common/middleware/asyncHandler');
@@ -26,6 +26,9 @@ router.get('/', asyncHandler(conversationsController.listMine));
 
 // GET /api/v1/conversations/:id — one conversation's details + participants
 router.get('/:id', conversationIdParamRule, validate, asyncHandler(conversationsController.getOne));
+
+// POST /api/v1/conversations/:id/read — mark messages as read up to messageId
+router.post('/:id/read', markReadRules, validate, asyncHandler(conversationsController.markRead));
 
 // Everything under /api/v1/conversations/:id/messages is handled by the messages module
 router.use('/:id/messages', messagesRoutes);
