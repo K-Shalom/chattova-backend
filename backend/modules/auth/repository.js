@@ -1,9 +1,4 @@
 // modules/auth/repository.js
-//
-// The REPOSITORY layer is the only place allowed to write raw SQL for this
-// module. Services never talk to the database directly — they call these
-// functions instead. This makes it easy to find every users-table query in
-// one place, and to swap the database later without touching business logic.
 
 const pool = require('../../config/database');
 
@@ -32,18 +27,27 @@ async function findById(id) {
 }
 
 async function createUser({ username, displayName, email, passwordHash }) {
-  const result = await pool.query(
-    `INSERT INTO users (username, display_name, email, password_hash)
-     VALUES ($1, $2, $3, $4)
-     RETURNING *`,
-    [username, displayName, email, passwordHash]
-  );
-  return result.rows[0];
+  const AppError = require('../../common/errors/AppError');
+  try {
+    const result = await pool.query(
+      `INSERT INTO users (username, display_name, email, password_hash)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [username, displayName, email, passwordHash]
+    );
+    return result.rows[0];
+  } catch (err) {
+    if (err.code === '23505') {
+      if (err.constraint && err.constraint.includes('username')) {
+        throw new AppError('This username is already taken.', 409, 'USERNAME_TAKEN');
+      }
+      if (err.constraint && err.constraint.includes('email')) {
+        throw new AppError('An account with this email already exists.', 409, 'EMAIL_TAKEN');
+      }
+      throw new AppError('This account already exists.', 409, 'DUPLICATE');
+    }
+    throw err;
+  }
 }
 
-module.exports = {
-  findByEmail,
-  findByUsername,
-  findById,
-  createUser,
-};
+module.exports = { findByEmail, findByUsername, findById, createUser };
