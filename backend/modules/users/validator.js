@@ -1,6 +1,6 @@
 // modules/users/validator.js
 
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 
 const updateProfileRules = [
   body('displayName').optional({ checkFalsy: true }).trim().isLength({ max: 100 })
@@ -17,4 +17,19 @@ const userIdParamRule = [
   param('id').isUUID().withMessage('Invalid user id.'),
 ];
 
-module.exports = { updateProfileRules, userIdParamRule };
+const searchRules = [
+  query('q').trim().isLength({ min: 2 }).withMessage('q must be at least 2 characters.'),
+];
+
+const changePasswordRules = [
+  body('currentPassword').notEmpty().withMessage('currentPassword is required.'),
+  body('newPassword').isLength({ min: 8 }).withMessage('newPassword must be at least 8 characters.'),
+];
+
+const deleteAccountRules = [
+  body('password').notEmpty().withMessage('password is required to confirm account deletion.'),
+];
+
+module.exports = {
+  updateProfileRules, userIdParamRule, searchRules, changePasswordRules, deleteAccountRules,
+};
