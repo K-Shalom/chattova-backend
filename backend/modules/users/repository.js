@@ -1,9 +1,4 @@
 // modules/users/repository.js
-//
-// Direct database queries for user profiles. Separate from auth/repository.js
-// on purpose — auth cares about "login/register", users cares about "profile
-// data". Both happen to read the same `users` table, which is normal in a
-// modular monolith (ADR-006).
 
 const pool = require('../../config/database');
 
@@ -30,4 +25,33 @@ async function updateProfile(id, { displayName, bio, statusMessage, avatarUrl })
   return result.rows[0] || null;
 }
 
-module.exports = { findById, updateProfile };
+async function searchByUsername(searchText, excludeUserId, limit) {
+  const result = await pool.query(
+    `SELECT * FROM users
+     WHERE username ILIKE $1
+       AND id != $2
+       AND deleted_at IS NULL
+     ORDER BY
+       CASE WHEN username ILIKE $3 THEN 0 ELSE 1 END,
+       username ASC
+     LIMIT $4`,
+    [`%${searchText}%`, excludeUserId, `${searchText}%`, limit]
+  );
+  return result.rows;
+}
+
+async function updatePassword(id, passwordHash) {
+  await pool.query(
+    `UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+    [passwordHash, id]
+  );
+}
+
+async function softDelete(id) {
+  await pool.query(
+    `UPDATE users SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`,
+    [id]
+  );
+}
+
+module.exports = { findById, updateProfile, searchByUsername, updatePassword, softDelete };
