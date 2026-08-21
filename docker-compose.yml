@@ -1,0 +1,27 @@
+# docker-compose.yml
+#
+# Runs MinIO — an S3-compatible object storage server — for storing message
+# attachments (photos, audio, files) during local development.
+#
+# Usage:
+#   docker-compose up -d      (start it running in the background)
+#   docker-compose down       (stop it)
+#   docker-compose logs -f    (watch its logs)
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: chattova-minio
+    ports:
+      - "9000:9000"   # the actual storage API (this is what our backend talks to)
+      - "9001:9001"   # the web dashboard (open http://localhost:9001 in a browser)
+    environment:
+      MINIO_ROOT_USER: chattova_minio_admin
+      MINIO_ROOT_PASSWORD: Shalx@12345
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+
+volumes:
+  minio_data:
