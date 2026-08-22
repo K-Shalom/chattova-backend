@@ -1,9 +1,4 @@
 // modules/auth/validator.js
-//
-// These rules run BEFORE the controller. If the request body doesn't match
-// (e.g. missing email, password too short), the request is rejected with a
-// clear 422 error and the controller code never even runs. This keeps
-// "is the input well-formed?" separate from "is this business-logic valid?".
 
 const { body } = require('express-validator');
 
@@ -32,6 +27,11 @@ const registerRules = [
 const loginRules = [
   body('email').trim().isEmail().withMessage('Please provide a valid email address.'),
   body('password').notEmpty().withMessage('Password is required.'),
+  // Device fields are all optional — only used if a client wants multi-device tracking.
+  body('deviceName').optional({ checkFalsy: true }).trim().isLength({ max: 100 }),
+  body('platform').optional({ checkFalsy: true }).trim().isLength({ max: 20 }),
+  body('pushToken').optional({ checkFalsy: true }).trim().isLength({ max: 500 }),
+  body('appVersion').optional({ checkFalsy: true }).trim().isLength({ max: 20 }),
 ];
 
 module.exports = { registerRules, loginRules };

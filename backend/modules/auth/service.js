@@ -1,16 +1,13 @@
 // modules/auth/service.js
-//
-// The SERVICE layer holds business logic: rules about WHAT is allowed to
-// happen (e.g. "email must be unique", "password must match before login").
-// Controllers stay thin and just call these functions.
 
 const bcrypt = require('bcrypt');
 const AppError = require('../../common/errors/AppError');
 const { signAccessToken, signRefreshToken } = require('../../common/helpers/jwt');
 const { toPublicUser } = require('./dto');
 const authRepository = require('./repository');
+const devicesRepository = require('../devices/repository');
 
-const SALT_ROUNDS = 12; // higher = slower but more secure; 12 is a solid default
+const SALT_ROUNDS = 12;
 
 async function register({ username, displayName, email, password }) {
   const existingEmail = await authRepository.findByEmail(email);
@@ -37,12 +34,9 @@ async function register({ username, displayName, email, password }) {
   return { user: toPublicUser(user), ...tokens };
 }
 
-async function login({ email, password }) {
+async function login({ email, password, device }) {
   const user = await authRepository.findByEmail(email);
 
-  // Deliberately vague error message — we never reveal whether it was the
-  // email or the password that was wrong. This stops attackers from using
-  // the login form to check which emails are registered.
   if (!user) {
     throw new AppError('Invalid email or password.', 401, 'INVALID_CREDENTIALS');
   }
@@ -53,6 +47,25 @@ async function login({ email, password }) {
   }
 
   const tokens = issueTokens(user);
+
+  // Device registration is optional — a client only sends this if it wants
+  // multi-device tracking / push notifications (mobile apps typically do;
+  // a quick curl test typically doesn't). We only register when a pushToken
+  // is provided, since that's the field the UNIQUE constraint relies on.
+  if (device && device.pushToken) {
+    try {
+      await devicesRepository.upsert({
+        userId: user.id,
+        deviceName: device.deviceName || null,
+        platform: device.platform || null,
+        pushToken: device.pushToken,
+        appVersion: device.appVersion || null,
+        lastIp: null,
+      });
+    } catch (err) {
+      console.error('Device registration failed (non-fatal):', err.message);
+    }
+  }
 
   return { user: toPublicUser(user), ...tokens };
 }
