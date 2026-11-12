@@ -1,0 +1,62 @@
+name: Backend CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend-checks:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: chattova_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chattova_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_NAME: chattova_test
+      DB_USER: postgres
+      DB_PASSWORD: ci-only-password
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-for-deployment
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-deployment
+      MINIO_ACCESS_KEY: ci-only-access-key
+      MINIO_SECRET_KEY: ci-only-secret-key
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Run unit tests
+        run: npm test
+      - name: Apply migrations to the disposable test database
+        run: npm run db:test:migrate
+      - name: Verify migrations can run again
+        run: npm run db:test:migrate
+      - name: Run API and socket integration tests
+        run: npm run test:integration
