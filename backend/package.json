@@ -10,7 +10,11 @@
     "check": "node scripts/check-syntax.js",
     "test": "node --test tests/unit/*.test.js",
     "db:test:migrate": "node scripts/migrate-test-db.js",
-    "test:integration": "node --test --test-concurrency=1 --test-timeout=30000 tests/integration/*.test.js"
+    "test:integration": "node --test --test-concurrency=1 --test-timeout=30000 tests/integration/*.test.js",
+    "test:compose": "node --test tests/compose/*.test.js",
+    "minio:configure": "node scripts/configure-minio.js",
+    "minio:rotate": "node scripts/configure-minio.js --rotate",
+    "minio:verify-rotation": "node scripts/verify-minio-rotation.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

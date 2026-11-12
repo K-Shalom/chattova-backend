@@ -54,6 +54,8 @@ jobs:
         run: npm run check
       - name: Run unit tests
         run: npm test
+      - name: Verify MinIO Compose credential requirements
+        run: npm run test:compose
       - name: Apply migrations to the disposable test database
         run: npm run db:test:migrate
       - name: Verify migrations can run again

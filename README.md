@@ -1,5 +1,7 @@
 # Chattova
 
+For file storage and password rotation, see [MinIO setup](docs/MINIO_SETUP.md). Compose requires local credentials; run `npm run minio:configure` from `backend/` first. Never commit `.env` files.
+
 Cross-platform communication platform — Global Mode (online) + Local Mode (offline P2P, post-v1.0).
 See `docs/SAD/` and `docs/DDD/` for the full architecture documentation.
 
