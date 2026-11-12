@@ -8,6 +8,7 @@ From `backend/`, run:
 npm ci
 npm run check
 npm test
+npm run test:compose
 ```
 
 Integration tests require an explicitly configured disposable database. Set `NODE_ENV=test`, `DB_NAME=chattova_test`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` in your shell. Use test-only values and never production credentials. Then run:
