@@ -12,10 +12,13 @@ async function create({ messageId, filename, mimeType, sizeBytes, storageUrl, ch
   return result.rows[0];
 }
 
-async function findByMessageId(messageId) {
+async function findByMessageId(messageId, conversationId) {
   const result = await pool.query(
-    `SELECT * FROM attachments WHERE message_id = $1 ORDER BY created_at ASC`,
-    [messageId]
+    `SELECT a.* FROM attachments a
+     JOIN messages m ON m.id = a.message_id
+     WHERE a.message_id = $1 AND m.conversation_id = $2 AND m.deleted_at IS NULL
+     ORDER BY a.created_at ASC`,
+    [messageId, conversationId]
   );
   return result.rows;
 }

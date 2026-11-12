@@ -120,3 +120,107 @@ test('Socket.IO rejects missing authentication and nonmember room joins', { time
   const result = await socket.timeout(3000).emitWithAck('conversation:join', conversationId);
   assert.equal(result.success, false);
 });
+
+test('attachment metadata is scoped to an active message in the authorized conversation', async (t) => {
+  // Seed metadata only: these authorization checks must not require real files or MinIO.
+  const otherConversation = await request('/conversations/direct', {
+    method: 'POST', token: second.accessToken, body: { otherUserId: outsider.user.id },
+  });
+  assert.equal(otherConversation.status, 201);
+  const otherConversationId = otherConversation.body.data.id;
+
+  async function messageWithAttachment(id, token) {
+    const sent = await request('/conversations/' + id + '/messages', {
+      method: 'POST', token, body: { type: 'file', content: 'Private test attachment' },
+    });
+    assert.equal(sent.status, 201);
+    const attachment = await pool.query(
+      `INSERT INTO attachments (message_id, filename, mime_type, size_bytes, storage_url)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [sent.body.data.id, 'private-fixture.txt', 'text/plain', 7,
+        'https://storage.invalid/private/' + randomUUID()],
+    );
+    return { messageId: sent.body.data.id, attachmentId: attachment.rows[0].id };
+  }
+
+  const own = await messageWithAttachment(conversationId, first.accessToken);
+  const other = await messageWithAttachment(otherConversationId, second.accessToken);
+  const attachmentPath = (id, messageId) =>
+    '/conversations/' + id + '/messages/' + messageId + '/attachments';
+
+  function assertMessageHidden(result) {
+    assert.equal(result.status, 404);
+    assert.deepEqual(result.body, {
+      success: false,
+      error: { code: 'MESSAGE_NOT_FOUND', message: 'Message not found.' },
+    });
+  }
+
+  async function uploadAttempt(id, messageId, token) {
+    const form = new FormData();
+    form.append('file', new Blob(['private fixture'], { type: 'text/plain' }), 'fixture.txt');
+    const response = await fetch(baseUrl + '/api/v1' + attachmentPath(id, messageId), {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: form,
+      signal: AbortSignal.timeout(10000),
+    });
+    return { status: response.status, body: await response.json() };
+  }
+
+  await t.test('a legitimate recipient receives the expected metadata', async () => {
+    const result = await request(attachmentPath(conversationId, own.messageId), { token: second.accessToken });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.success, true);
+    assert.equal(result.body.data.length, 1);
+    assert.equal(result.body.data[0].id, own.attachmentId);
+    assert.equal(result.body.data[0].messageId, own.messageId);
+  });
+
+  await t.test('a member of A cannot read B attachments through A', async () => {
+    assertMessageHidden(await request(attachmentPath(conversationId, other.messageId), { token: first.accessToken }));
+  });
+
+  await t.test('mismatched IDs are rejected even for a member of both conversations', async () => {
+    assertMessageHidden(await request(attachmentPath(conversationId, other.messageId), { token: second.accessToken }));
+  });
+
+  await t.test('a nonmember receives no attachment metadata', async () => {
+    const result = await request(attachmentPath(conversationId, own.messageId), { token: outsider.accessToken });
+    assert.equal(result.status, 404);
+    assert.deepEqual(result.body, {
+      success: false,
+      error: { code: 'CONVERSATION_NOT_FOUND', message: 'Conversation not found.' },
+    });
+  });
+
+  await t.test('missing messages follow the same not-found contract', async () => {
+    assertMessageHidden(await request(attachmentPath(conversationId, randomUUID()), { token: first.accessToken }));
+  });
+
+  await t.test('an existing message without attachments still returns an empty list', async () => {
+    const sent = await request('/conversations/' + conversationId + '/messages', {
+      method: 'POST', token: first.accessToken, body: { type: 'text', content: 'No attachment' },
+    });
+    assert.equal(sent.status, 201);
+    const result = await request(attachmentPath(conversationId, sent.body.data.id), { token: first.accessToken });
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body, { success: true, data: [] });
+  });
+
+  await t.test('soft-deleted messages hide attachment metadata from their sender too', async () => {
+    const removed = await request('/conversations/' + conversationId + '/messages/' + own.messageId, {
+      method: 'DELETE', token: first.accessToken,
+    });
+    assert.equal(removed.status, 200);
+    assertMessageHidden(await request(attachmentPath(conversationId, own.messageId), { token: first.accessToken }));
+  });
+
+  await t.test('uploads cannot target a message from a different conversation', async () => {
+    assertMessageHidden(await uploadAttempt(conversationId, other.messageId, first.accessToken));
+  });
+
+  await t.test('uploads cannot add files to soft-deleted messages', async () => {
+    assertMessageHidden(await uploadAttempt(conversationId, own.messageId, first.accessToken));
+    const attachments = await pool.query('SELECT id FROM attachments WHERE message_id = $1', [own.messageId]);
+    assert.equal(attachments.rowCount, 1);
+  });
+});
