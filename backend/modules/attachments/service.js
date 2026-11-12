@@ -15,7 +15,7 @@ async function uploadAttachment(currentUserId, conversationId, messageId, file) 
   }
 
   const message = await messagesRepository.findById(messageId);
-  if (!message || message.conversation_id !== conversationId) {
+  if (!message || message.conversation_id !== conversationId || message.deleted_at) {
     throw new AppError('Message not found.', 404, 'MESSAGE_NOT_FOUND');
   }
   if (message.sender_id !== currentUserId) {
@@ -54,7 +54,12 @@ async function listForMessage(currentUserId, conversationId, messageId) {
     throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
   }
 
-  const rows = await attachmentsRepository.findByMessageId(messageId);
+  const message = await messagesRepository.findById(messageId);
+  if (!message || message.conversation_id !== conversationId || message.deleted_at) {
+    throw new AppError('Message not found.', 404, 'MESSAGE_NOT_FOUND');
+  }
+
+  const rows = await attachmentsRepository.findByMessageId(messageId, conversationId);
   return rows.map(toAttachment);
 }
 

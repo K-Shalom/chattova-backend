@@ -156,6 +156,16 @@ test('attachment metadata is scoped to an active message in the authorized conve
     });
   }
 
+  async function uploadAttempt(id, messageId, token) {
+    const form = new FormData();
+    form.append('file', new Blob(['private fixture'], { type: 'text/plain' }), 'fixture.txt');
+    const response = await fetch(baseUrl + '/api/v1' + attachmentPath(id, messageId), {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: form,
+      signal: AbortSignal.timeout(10000),
+    });
+    return { status: response.status, body: await response.json() };
+  }
+
   await t.test('a legitimate recipient receives the expected metadata', async () => {
     const result = await request(attachmentPath(conversationId, own.messageId), { token: second.accessToken });
     assert.equal(result.status, 200);
@@ -202,5 +212,15 @@ test('attachment metadata is scoped to an active message in the authorized conve
     });
     assert.equal(removed.status, 200);
     assertMessageHidden(await request(attachmentPath(conversationId, own.messageId), { token: first.accessToken }));
+  });
+
+  await t.test('uploads cannot target a message from a different conversation', async () => {
+    assertMessageHidden(await uploadAttempt(conversationId, other.messageId, first.accessToken));
+  });
+
+  await t.test('uploads cannot add files to soft-deleted messages', async () => {
+    assertMessageHidden(await uploadAttempt(conversationId, own.messageId, first.accessToken));
+    const attachments = await pool.query('SELECT id FROM attachments WHERE message_id = $1', [own.messageId]);
+    assert.equal(attachments.rowCount, 1);
   });
 });
